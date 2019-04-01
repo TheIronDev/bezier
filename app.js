@@ -1,5 +1,6 @@
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const DRAG_REGION = 50;
 
 class Point {
   constructor(relX, relY, canvas, dpr, pointName) {
@@ -9,6 +10,8 @@ class Point {
     this.dpr = dpr;
     this.pointName = pointName;
     this.r = 5;
+
+    this.isDragable = false;
   }
   draw(ctx, start) {
     const {relX, relY, width, height, r, pointName} = this;
@@ -18,18 +21,35 @@ class Point {
 
     ctx.beginPath();
     ctx.textBaseline = 'top';
-    ctx.arc(x, y, r, 0, Math.PI * 2);
+
+    ctx.fillStyle = 'black';
     ctx.fillText(`${pointName}`, x, y + r +5);
     ctx.fillText(`${~~(x - start.getX())} ${~~(y - start.getY())}`, x, y + r + 15);
+
+    ctx.fillStyle = this.isDragable ? 'green' : 'black';
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
+  }
+  getDistance(x, y) {
+    return Math.sqrt(
+        Math.pow(this.getX() - x, 2) +
+        Math.pow(this.getY() - y, 2));
   }
   getX() {
     return this.relX * this.canvas.width / this.dpr;
   }
   getY() {
     return this.relY * this.canvas.height / this.dpr;
+  }
+  updateIsDragable(x, y) {
+    const distance = this.getDistance(x, y);
+    this.isDragable = distance < DRAG_REGION;
+  }
+  updatePosition(relX, relY) {
+    this.relX = relX;
+    this.relY = relY;
   }
 }
 class Bezier {
@@ -84,22 +104,68 @@ const resize = () => {
 const dpr = window.devicePixelRatio || 1;
 const start = new Point(.25, .5, canvas, dpr, 'Start');
 const end = new Point(.75, .5, canvas, dpr, 'End');
-let cp1, cp2;
+let cp1, cp2, dragPoint;
 
-window.addEventListener('resize', () => resize());
-canvas.addEventListener('mousedown', ev => {
-  const {clientX, clientY} = ev;
+const addOrSelect = ev => {
+  ev.preventDefault();
   const {width, height} = canvas;
+  let {clientX, clientY, targetTouches} = ev;
+
+  if (targetTouches) {
+    clientX = targetTouches[0].clientX;
+    clientY = targetTouches[0].clientY;
+  }
 
   if (!cp1) {
     cp1 = new Point(clientX/width * dpr, clientY/height * dpr, canvas, dpr, 'CP1');
   } else if (!cp2) {
     cp2 = new Point(clientX/width * dpr, clientY/height * dpr, canvas, dpr, 'CP2');
+  } else {
+    const cp1Distance = cp1.getDistance(clientX, clientY);
+    const cp2Distance = cp2.getDistance(clientX, clientY);
+    const isCp1Closer = Math.abs(cp1Distance) < Math.abs(cp2Distance);
+
+    if (isCp1Closer && cp1Distance < DRAG_REGION) dragPoint = cp1;
+    else if (cp2Distance < DRAG_REGION) dragPoint = cp2;
+    return;
   }
   draw();
+}
 
-});
+const move = ev => {
+  ev.preventDefault();
+  const {width, height} = canvas;
+  let {clientX, clientY, targetTouches} = ev;
 
+  if (targetTouches) {
+    clientX = targetTouches[0].clientX;
+    clientY = targetTouches[0].clientY;
+  }
+
+  cp1 && cp1.updateIsDragable(clientX, clientY);
+  cp2 && cp2.updateIsDragable(clientX, clientY);
+  if (dragPoint) {
+    dragPoint.updatePosition(clientX/width * dpr, clientY/height * dpr);
+  }
+  draw();
+}
+
+const clearDrag = ev => {
+  dragPoint = null;
+}
+
+window.addEventListener('resize', resize);
+
+canvas.addEventListener('mousedown', addOrSelect);
+canvas.addEventListener('touchstart', addOrSelect);
+
+
+canvas.addEventListener('mousemove', move);
+canvas.addEventListener('touchmove', move);
+
+canvas.addEventListener('touchend', clearDrag);
+canvas.addEventListener('mouseup', clearDrag);
+canvas.addEventListener('mouseleave', clearDrag);
 
 resize();
 draw();
