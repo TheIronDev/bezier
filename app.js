@@ -11,7 +11,7 @@ class Point {
     this.pointName = pointName;
     this.r = 5;
 
-    this.isDragable = false;
+    this.isDraggable = false;
   }
   draw(ctx, start) {
     const {relX, relY, width, height, r, pointName} = this;
@@ -24,9 +24,9 @@ class Point {
 
     ctx.fillStyle = 'black';
     ctx.fillText(`${pointName}`, x, y + r +5);
-    ctx.fillText(`${~~(x - start.getX())} ${~~(y - start.getY())}`, x, y + r + 15);
+    ctx.fillText(`(${~~(x - start.getX())}, ${~~(y - start.getY())})`, x, y + r + 15);
 
-    ctx.fillStyle = this.isDragable ? 'green' : 'black';
+    ctx.fillStyle = this.isDraggable ? 'green' : 'black';
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
 
@@ -43,9 +43,10 @@ class Point {
   getY() {
     return this.relY * this.canvas.height / this.dpr;
   }
-  updateIsDragable(x, y) {
+  updateIsDragable(x, y, override = null) {
     const distance = this.getDistance(x, y);
-    this.isDragable = distance < DRAG_REGION;
+    this.isDraggable = distance < DRAG_REGION;
+    if (override !== null) this.isDraggable = override;
   }
   updatePosition(relX, relY) {
     this.relX = relX;
@@ -137,16 +138,27 @@ const move = ev => {
   const {width, height} = canvas;
   let {clientX, clientY, targetTouches} = ev;
 
+
+  canvas.classList.remove('move');
+  canvas.classList.remove('add');
+
   if (targetTouches) {
     clientX = targetTouches[0].clientX;
     clientY = targetTouches[0].clientY;
   }
 
-  cp1 && cp1.updateIsDragable(clientX, clientY);
-  cp2 && cp2.updateIsDragable(clientX, clientY);
-  if (dragPoint) {
-    dragPoint.updatePosition(clientX/width * dpr, clientY/height * dpr);
+  if (cp2) {
+    const cp1Distance = cp1.getDistance(clientX, clientY);
+    const cp2Distance = cp2.getDistance(clientX, clientY);
+    const isCp1Closer = Math.abs(cp1Distance) < Math.abs(cp2Distance);
+    cp1.updateIsDragable(clientX, clientY, isCp1Closer);
+    cp2.updateIsDragable(clientX, clientY, !isCp1Closer);
+    if (cp1.isDraggable || cp2.isDraggable || dragPoint) canvas.classList.add('move');
+    if (dragPoint) dragPoint.updatePosition(clientX/width * dpr, clientY/height * dpr);
+  } else {
+    canvas.classList.add('add');
   }
+
   draw();
 }
 
